@@ -1,6 +1,6 @@
-torch==2.1.0+cu118  # Ensure compatibility with CUDA 11.8 (modify version as needed)
-torchvision==0.16.0+cu118  # Optional, if using image models
-torchaudio==2.1.0+cu118  # Optional, for audio models
+torch==2.1.0  # Ensure compatibility with CUDA 11.8 (modify version as needed)
+torchvision==0.16.0  # Optional, if using image models
+torchaudio==2.1.0  # Optional, for audio models
 transformers
 huggingface-hub
 openai

@@ -27,7 +27,8 @@ cd next-level/src  # Change to your repo's directory
 
 # Install dependencies
 echo "Installing dependencies from requirements.txt..."
-pip3 install -r requirements.in
+pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118
+
 
 echo "Setup completed successfully!"
 
