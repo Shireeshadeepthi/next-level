@@ -25,10 +25,12 @@ echo "Cloning repository from $REPO_URL..."
 git clone "$REPO_URL"
 cd next-level/src  # Change to your repo's directory
 
+
+
 # Install dependencies
 echo "Installing dependencies from requirements.txt..."
-pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu118
-
+pip install -r requirements.in --index-url https://download.pytorch.org/whl/cu118
+pip install -r requirements2.in
 
 echo "Setup completed successfully!"
 
