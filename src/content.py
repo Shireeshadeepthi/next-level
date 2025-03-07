@@ -3,14 +3,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import pandas as pd
 import json
 import random
-import os  # To handle file paths
+import os
+from torch.cuda.amp import autocast
+
+# Set device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Step 1: Set Up the Environment
 def setup_environment():
-    # Load the model and tokenizer
-    model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"  # Replace with the actual model name
+    model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name).to(device)  # Move model to GPU
     model.eval()
     return model, tokenizer
 
@@ -26,20 +29,32 @@ def split_and_tag(text, subject, grade, tokenizer, chunk_size=512):
     return tagged_chunks
 
 # Step 3: Generate Topics
-def extract_topics(chunk, model, tokenizer):
-    prompt = f"Extract the most relevant topics from the following lesson content that are likely to appear in exams:\n\n{chunk}\n\nReturn the topics as a list."
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = model.generate(**inputs, max_length=1000 )
-    topics = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return topics.split(", ")
+def extract_topics(chunks, model, tokenizer):
+    prompts = [
+        f"Extract the most relevant topics from the following lesson content that are likely to appear in exams:\n\n{chunk['content']}\n\nReturn the topics as a list."
+        for chunk in chunks
+    ]
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+
+    with torch.no_grad(), autocast():  # Enable mixed precision
+        outputs = model.generate(**inputs, max_length=200)
+
+    topics = [tokenizer.decode(output, skip_special_tokens=True).split(", ") for output in outputs]
+    return topics
 
 # Step 4: Generate Questions
-def generate_questions(topic, subject, model, tokenizer):
-    prompt = f"Generate 5 exam-style questions for the topic '{topic}' in {subject} for CBSE Class 9. Ensure the questions are of medium difficulty and avoid duplication."
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = model.generate(**inputs, max_length=500)
-    questions = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return questions.split("\n")
+def generate_questions(topics, subject, model, tokenizer):
+    prompts = [
+        f"Generate 5 exam-style questions for the topic '{topic}' in {subject} for CBSE Class 9. Ensure the questions are of medium difficulty and avoid duplication."
+        for topic in topics
+    ]
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+
+    with torch.no_grad(), autocast():  # Enable mixed precision
+        outputs = model.generate(**inputs, max_length=200)
+
+    questions = [tokenizer.decode(output, skip_special_tokens=True).split("\n") for output in outputs]
+    return questions
 
 # Step 5: Create Question Papers
 def create_question_paper(question_bank, num_questions=10):
@@ -48,12 +63,18 @@ def create_question_paper(question_bank, num_questions=10):
     return selected_questions
 
 # Step 6: Validate Questions
-def validate_question(question, model, tokenizer):
-    prompt = f"Review the following question for CBSE Class 9 and check for profanity, subject relevance, duplication, and bias:\n\n{question}\n\nReturn 'Valid' or 'Invalid' with reasons."
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = model.generate(**inputs, max_length=200)
-    validation_result = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return validation_result
+def validate_questions(questions, model, tokenizer):
+    prompts = [
+        f"Review the following question for CBSE Class 9 and check for profanity, subject relevance, duplication, and bias:\n\n{question}\n\nReturn 'Valid' or 'Invalid' with reasons."
+        for question in questions
+    ]
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+
+    with torch.no_grad(), autocast():  # Enable mixed precision
+        outputs = model.generate(**inputs, max_length=100)
+
+    validation_results = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
+    return validation_results
 
 # Main Function
 def main():
@@ -84,9 +105,8 @@ def main():
 
         # Step 4: Generate topics
         all_topics = []
-        for chunk in chunks:
-            topics = extract_topics(chunk["content"], model, tokenizer)
-            all_topics.extend(topics)
+        topics = extract_topics(chunks, model, tokenizer)  # Process all chunks at once
+        all_topics.extend([topic for sublist in topics for topic in sublist])
         all_topics = list(set(all_topics))
 
         # Save topics to a CSV file
@@ -97,9 +117,9 @@ def main():
 
         # Step 5: Generate questions
         question_bank = {}
-        for topic in all_topics:
-            questions = generate_questions(topic, subject_folder, model, tokenizer)
-            question_bank[topic] = questions
+        questions = generate_questions(all_topics, subject_folder, model, tokenizer)  # Process all topics at once
+        for topic, question_list in zip(all_topics, questions):
+            question_bank[topic] = question_list
 
         # Save questions to a JSON file
         with open(f"{lesson_name}_question_bank.json", "w") as file:
@@ -113,7 +133,8 @@ def main():
         # Step 7: Validate questions
         validated_questions = {}
         for topic, questions in question_bank.items():
-            validated_questions[topic] = [validate_question(q, model, tokenizer) for q in questions]
+            validation_results = validate_questions(questions, model, tokenizer)  # Process all questions at once
+            validated_questions[topic] = validation_results
 
         # Save validated questions to a JSON file
         with open(f"{lesson_name}_validated_questions.json", "w") as file:

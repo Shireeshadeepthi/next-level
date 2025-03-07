@@ -15,14 +15,20 @@ sudo apt install -y python3 python3-pip python3-venv
 echo "Installing Git..."
 sudo apt install -y git
 
+# create a folder
+mkdir code
+cd code
+
 # Clone the repository (Change URL to your repo)
-REPO_URL="https://github.com/yourusername/your-repo.git"
+REPO_URL="https://github.com/Shireeshadeepthi/next-level.git"
 echo "Cloning repository from $REPO_URL..."
 git clone "$REPO_URL"
-cd your-repo  # Change to your repo's directory
+cd next-level/src  # Change to your repo's directory
 
 # Install dependencies
 echo "Installing dependencies from requirements.txt..."
-pip3 install -r requirements.txt
+pip3 install -r requirements.in
 
 echo "Setup completed successfully!"
+
+python3 content.py
